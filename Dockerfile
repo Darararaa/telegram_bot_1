@@ -1,12 +1,13 @@
-# Використовуємо Python 3.10 як базовий образ
-FROM python:3.10
-
-# Копіюємо файли бота в контейнер
-WORKDIR /app
-COPY . /app
+# Вибираємо базовий образ Python
+FROM python:3.9-slim
 
 # Встановлюємо залежності
-RUN pip install -r requirements.txt
+WORKDIR /app
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Запускаємо бота
-CMD ["python", "bot.py"]
+# Копіюємо увесь код в контейнер
+COPY . /app
+
+# Вказуємо команду для запуску вашого бота
+CMD ["python", "your_bot_file.py"]
