@@ -9,7 +9,7 @@ primary_region = 'waw'
 [build]
 
 [processes]
-  app = "python main.py"
+  app = "python bot.py"
 
 [[vm]]
   memory_mb = 512
