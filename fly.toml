@@ -1,0 +1,18 @@
+# fly.toml app configuration file generated for telegram-bot-1 on 2024-11-08T20:24:24Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'telegram-bot-1'
+primary_region = 'waw'
+
+[build]
+
+[processes]
+  app = "python bot.py"
+
+[[vm]]
+  memory_mb = 512
+  cpu_kind = 'shared'
+  cpus = 1
+
