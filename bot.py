@@ -37,6 +37,8 @@ WAITING_FOR_E_SKILL_LEVEL_UPDATE = 11
 WAITING_FOR_BURST_LEVEL_UPDATE = 12
 WAITING_FOR_TALENT_CHOICE = 13
 WAITING_FOR_TALENT_UPDATE = 14
+WAITING_FOR_DAY_INPUT = 15
+
 
 
 # Функція /start
@@ -45,7 +47,7 @@ async def start(update: Update, context):
     await update.message.reply_text(
         "Привіт! Вибери одну з опцій:\n"
         "1. Створити новий акаунт\n"
-        "2. Увійти в існуючий акаунт(764182314)"
+        "2. Увійти в існуючий акаунт(764182314, 745005008)"
     )
     return WAITING_FOR_ACCOUNT_CHOICE
 
@@ -137,7 +139,7 @@ async def save_e_skill_level(update: Update, context):
 
 async def save_burst_level(update: Update, context):
     context.user_data["burst_level"] = int(update.message.text)
-    await update.message.reply_text("Введи дні для талантів (наприклад, середа/субота):")
+    await update.message.reply_text("Введи дні для талантів (наприклад, середа, субота):")
     return WAITING_FOR_TALENT_DAYS
 
 
@@ -148,11 +150,26 @@ async def save_talent_days(update: Update, context):
                     context.user_data["hand_level"], context.user_data["e_skill_level"],
                     context.user_data["burst_level"], update.message.text))
     conn.commit()
-    await update.message.reply_text(f"Персонаж {context.user_data['name']} додано успішно!")
+    await update.message.reply_text(f"Персонаж {context.user_data['name']} додано успішно!"
+                                    f"Можеш додавати персонажів командою /add_character\n "
+                                    "або переглянути персонажів командою /show_characters\n "
+                                    "або знайти персонажів за днем /find_characters_by_day\n "
+                                    "або оновити дані персонажа /update_character\n ")
     return ConversationHandler.END
 
 
-# Показати всіх персонажів для UID
+def normalize_talent_days():
+    logging.info("Початок нормалізації даних talent_days...")
+    cursor.execute("SELECT id, talent_days FROM characters")
+    rows = cursor.fetchall()
+    for row in rows:
+        record_id, talent_days = row
+        updated_days = ', '.join(day.strip().lower() for day in talent_days.split('/'))
+        cursor.execute("UPDATE characters SET talent_days = ? WHERE id = ?", (updated_days, record_id))
+    conn.commit()
+    logging.info("Нормалізація даних завершена.")
+
+
 async def show_characters(update: Update, context):
     uid = context.user_data.get("uid")
     if not uid:
@@ -164,11 +181,19 @@ async def show_characters(update: Update, context):
 
     if characters:
         response = "Твої персонажі:\n"
-        for char in characters:
-            response += (f"Ім'я: {char[0]}\n"
-                         f"Таланти (рука/ешка/ульт): {char[1]}/{char[2]}/{char[3]}\n"
-                         f"Дні талантів: {char[4]}\n")
-        await update.message.reply_text(response)
+        for idx, char in enumerate(characters, start=1):
+            response += (f"{idx}. Ім'я: {char[0]}\n"
+                         f"   Таланти (рука/ешка/ульт): {char[1]}/{char[2]}/{char[3]}\n"
+                         f"   Дні талантів: {char[4]}\n\n")
+
+            # Якщо довжина повідомлення перевищує 3000 символів, надсилаємо його та починаємо нове
+            if len(response) > 3000:
+                await update.message.reply_text(response)
+                response = ""
+
+        # Надсилаємо залишок повідомлення, якщо є
+        if response:
+            await update.message.reply_text(response)
     else:
         await update.message.reply_text("Немає персонажів для цього UID.")
 
@@ -178,37 +203,45 @@ async def find_characters_by_day(update: Update, context):
     await update.message.reply_text("Будь ласка, введи день тижня (наприклад, понеділок, середа, субота):")
 
 
+async def request_day(update: Update, context):
+    await update.message.reply_text("Будь ласка, введи день тижня (наприклад, понеділок, середа, субота):")
+    return WAITING_FOR_DAY_INPUT
+
+
 async def show_characters_by_day(update: Update, context):
     day = update.message.text.strip().lower()
 
     # Перевірка на коректність введеного дня
-    valid_days = ["понеділок", "вівторок", "середа", "четвер", "п'ятниця", "субота", "неділя"]
+    valid_days = ["понеділок", "вівторок", "середа", "четвер", "пятниця", "п'ятниця", "субота", "неділя"]
     if day not in valid_days:
-        await update.message.reply_text("Невірний день тижня! Будь ласка, введи один із наступних днів: "
+        await update.message.reply_text("Невірний день тижня! Введи один із наступних днів: "
                                         "понеділок, вівторок, середа, четвер, п'ятниця, субота, неділя.")
-        return
+        return WAITING_FOR_DAY_INPUT
 
     uid = context.user_data.get("uid")
     if not uid:
         await update.message.reply_text("Будь ласка, спочатку увійди в акаунт командою /start.")
-        return
+        return ConversationHandler.END
 
     # Запит до бази даних для пошуку персонажів за днем
-    search_pattern = f"%{day.capitalize()}%"
+    search_pattern = f"%{day.lower()}%"
     cursor.execute('''SELECT name, hand_level, e_skill_level, burst_level, talent_days
                       FROM characters
                       WHERE uid = ? AND LOWER(talent_days) LIKE ?''', (uid, search_pattern))
-    characters = cursor.fetchall()
+    characters = cursor.fetchall()  # Витягуємо результати запиту
 
+    # Перевірка, чи є результати
     if characters:
-        response = f"Ось персонажі у яких є день {day.capitalize()}:\n"
+        response = f"Ось персонажі, у яких є день {day.capitalize()}:\n"
         for idx, char in enumerate(characters, start=1):
             response += (f"{idx}. Ім'я: {char[0]}\n"
-                         f"Таланти (рука/ешка/ульт): {char[1]}/{char[2]}/{char[3]}\n"
-                         f"Дні талантів: {char[4]}\n\n")
+                         f"   Таланти (рука/ешка/ульт): {char[1]}/{char[2]}/{char[3]}\n"
+                         f"   Дні талантів: {char[4]}\n\n")
         await update.message.reply_text(response)
     else:
         await update.message.reply_text(f"Немає персонажів для обраного дня: {day.capitalize()}.")
+
+    return ConversationHandler.END
 
 
 # Функція для початку оновлення персонажа
@@ -220,6 +253,7 @@ async def update_character(update: Update, context):
 
     await update.message.reply_text("Введи ім'я персонажа, якого ти хочеш оновити:")
     return WAITING_FOR_CHARACTER_NAME_UPDATE
+
 
 # Перевірка існування персонажа та показ меню талантів
 async def update_character_name(update: Update, context):
@@ -250,6 +284,7 @@ async def update_character_name(update: Update, context):
     )
     return WAITING_FOR_TALENT_CHOICE
 
+
 # Обробка вибору таланту
 async def choose_talent_to_update(update: Update, context):
     choice = update.message.text.strip()
@@ -268,6 +303,7 @@ async def choose_talent_to_update(update: Update, context):
     else:
         await update.message.reply_text("Невірний вибір. Введи 1, 2 або 3.")
         return WAITING_FOR_TALENT_CHOICE
+
 
 # Оновлення обраного таланту
 async def update_talent_level(update: Update, context):
@@ -328,14 +364,24 @@ update_character_handler = ConversationHandler(
     fallbacks=[CommandHandler("start", start)]
 )
 
+find_by_day_handler = ConversationHandler(
+    entry_points=[CommandHandler("find_characters_by_day", request_day)],  # Замість "show_characters_by_day"
+    states={
+        WAITING_FOR_DAY_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, show_characters_by_day)],
+    },
+    fallbacks=[CommandHandler("start", start)]
+)
+
 
 if __name__ == "__main__":
+    normalize_talent_days()
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(account_handler)
     application.add_handler(character_handler)
     application.add_handler(CommandHandler("show_characters", show_characters))
-    application.add_handler(CommandHandler("show_characters_by_day", show_characters_by_day))
     application.add_handler(update_character_handler)
+    application.add_handler(find_by_day_handler)
     application.run_polling()
+
 
 
