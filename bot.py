@@ -47,7 +47,7 @@ async def start(update: Update, context):
     await update.message.reply_text(
         "Привіт! Вибери одну з опцій:\n"
         "1. Створити новий акаунт\n"
-        "2. Увійти в існуючий акаунт(764182314, 745005008)"
+        "2. Увійти в існуючий акаунт"
     )
     return WAITING_FOR_ACCOUNT_CHOICE
 
