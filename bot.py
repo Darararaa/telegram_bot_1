@@ -381,7 +381,7 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("show_characters", show_characters))
     application.add_handler(update_character_handler)
     application.add_handler(find_by_day_handler)
-    application.run_polling()
+    #application.run_polling()
 
 
 
