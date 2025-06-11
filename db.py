@@ -1,8 +1,8 @@
 import sqlite3
 import os
 
-# Шлях до бази даних
-DB_PATH = 'D:/Daria/Personal/My projects/genshin_telegram_bot/data/genshin_bot.db'
+# Шлях до бази даних (автоматично визначає шлях відносно файлу)
+DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'genshin_bot.db')
 
 # Перевірка на існування каталогу, якщо його немає — створюємо
 if not os.path.exists('data'):
